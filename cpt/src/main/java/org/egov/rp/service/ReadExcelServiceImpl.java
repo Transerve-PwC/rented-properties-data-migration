@@ -1,0 +1,293 @@
+package org.egov.rp.service;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+
+import org.apache.commons.compress.archivers.dump.InvalidFormatException;
+import org.apache.poi.openxml4j.exceptions.OpenXML4JException;
+import org.apache.poi.openxml4j.opc.OPCPackage;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.eventusermodel.ReadOnlySharedStringsTable;
+import org.apache.poi.xssf.eventusermodel.XSSFReader;
+import org.apache.poi.xssf.eventusermodel.XSSFSheetXMLHandler.SheetContentsHandler;
+import org.apache.poi.xssf.model.SharedStrings;
+import org.apache.poi.xssf.model.Styles;
+import org.apache.poi.xssf.model.StylesTable;
+import org.egov.rp.entities.Address;
+import org.egov.rp.entities.Owner;
+import org.egov.rp.entities.OwnerDetails;
+import org.egov.rp.entities.Property;
+import org.egov.rp.entities.PropertyDetails;
+import org.egov.rp.repository.PropertyRepository;
+import org.egov.rp.service.StreamingSheetContentsHandler.StreamingRowProcessor;
+import org.egov.tracer.model.CustomException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.xml.sax.ContentHandler;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Service
+public class ReadExcelServiceImpl implements ReadExcelService {
+
+	@Autowired
+	private PropertyRepository propertyRepository;
+
+	@Override
+	public List<Property> getDataFromExcel(File file, int sheetIndex) {
+		try {
+			OPCPackage opcPackage = OPCPackage.open(file);
+			return this.process(opcPackage, sheetIndex);
+		} catch (IOException | OpenXML4JException | SAXException e) {
+			log.error("Error while parsing Excel", e);
+			throw new CustomException("PARSE_ERROR", "Could not parse excel. Error is " + e.getMessage());
+		}
+
+	}
+
+	private void processSheet(Styles styles, SharedStrings strings, SheetContentsHandler sheetHandler,
+			InputStream sheetInputStream) throws IOException, SAXException {
+		DataFormatter formatter = new DataFormatter();
+		InputSource sheetSource = new InputSource(sheetInputStream);
+		try {
+			SAXParserFactory saxFactory = SAXParserFactory.newInstance();
+			saxFactory.setNamespaceAware(false);
+			SAXParser saxParser = saxFactory.newSAXParser();
+			XMLReader sheetParser = saxParser.getXMLReader();
+			ContentHandler handler = new MyXSSFSheetXMLHandler(styles, null, strings, sheetHandler, formatter, false);
+			sheetParser.setContentHandler(handler);
+			sheetParser.parse(sheetSource);
+		} catch (ParserConfigurationException e) {
+			throw new RuntimeException("SAX parser appears to be broken - " + e.getMessage());
+		}
+	}
+
+	private List<Property> process(OPCPackage xlsxPackage, int sheetNo)
+			throws IOException, OpenXML4JException, SAXException, CustomException {
+		ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage);
+		XSSFReader xssfReader = new XSSFReader(xlsxPackage);
+		StylesTable styles = xssfReader.getStylesTable();
+		XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
+		int index = 0;
+		while (iter.hasNext()) {
+			try (InputStream stream = iter.next()) {
+				// String sheetName = iter.getSheetName();
+				if (index == sheetNo) {
+					SheetContentsProcessor processor = new SheetContentsProcessor();
+					processSheet(styles, strings, new StreamingSheetContentsHandler(processor), stream);
+					if (!processor.propertyList.isEmpty()) {
+						return saveProperties(processor.propertyList);
+					}
+				}
+				index++;
+			}
+		}
+		throw new CustomException("PARSE_ERROR", "Could not process sheet no " + sheetNo);
+	}
+
+	protected Object getValueFromCell(Row row, int cellNo, Row.MissingCellPolicy cellPolicy) {
+		Cell cell1 = row.getCell(cellNo, cellPolicy);
+		Object objValue = "";
+		switch (cell1.getCellType()) {
+		case BLANK:
+			objValue = "";
+			break;
+		case STRING:
+			objValue = cell1.getStringCellValue();
+			break;
+		case NUMERIC:
+			try {
+				if (DateUtil.isCellDateFormatted(cell1)) {
+					objValue = cell1.getDateCellValue().getTime();
+				} else {
+					throw new InvalidFormatException();
+				}
+			} catch (Exception ex1) {
+				try {
+					objValue = cell1.getNumericCellValue();
+				} catch (Exception ex2) {
+					objValue = 0.0;
+				}
+			}
+
+			break;
+		case FORMULA:
+			objValue = cell1.getNumericCellValue();
+			break;
+
+		default:
+			objValue = "";
+		}
+		return objValue;
+	}
+
+	protected long convertStrDatetoLong(String dateStr) {
+		try {
+			SimpleDateFormat f = new SimpleDateFormat("dd/MM/yyyy");
+			Date d = f.parse(dateStr);
+			return d.getTime();
+		} catch (Exception e) {
+			log.error("Date parsing issue occur :" + e.getMessage());
+		}
+		return 0;
+	}
+
+	private class SheetContentsProcessor implements StreamingRowProcessor {
+
+		List<Property> propertyList = new ArrayList<>();
+
+		@Override
+		public void processRow(Row currentRow) {
+
+			if (currentRow.getRowNum() >= 7) {
+				if (currentRow.getCell(2) != null) {
+					String firstCell = String
+							.valueOf(getValueFromCell(currentRow, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String secondCell = String
+							.valueOf(getValueFromCell(currentRow, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String thirdCell = String
+							.valueOf(getValueFromCell(currentRow, 3, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String fourthCell = String
+							.valueOf(getValueFromCell(currentRow, 4, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String fifthCell = String
+							.valueOf(getValueFromCell(currentRow, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String sixthCell = String
+							.valueOf(getValueFromCell(currentRow, 6, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String seventhCell = String
+							.valueOf(getValueFromCell(currentRow, 7, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String eirthCell = String
+							.valueOf(getValueFromCell(currentRow, 8, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String ninthCell = String
+							.valueOf(getValueFromCell(currentRow, 9, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String tenthCell = String
+							.valueOf(getValueFromCell(currentRow, 10, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String eleventhCell = String
+							.valueOf(getValueFromCell(currentRow, 11, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					// twelve is date
+					String twelveCell = String
+							.valueOf(getValueFromCell(currentRow, 12, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String thirteenCell = String
+							.valueOf(getValueFromCell(currentRow, 13, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					// fourteen is date
+					String fourteenCell = String
+							.valueOf(getValueFromCell(currentRow, 14, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String fifteenCell = String
+							.valueOf(getValueFromCell(currentRow, 15, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String sixteenCell = String
+							.valueOf(getValueFromCell(currentRow, 16, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					String seventeenCell = String
+							.valueOf(getValueFromCell(currentRow, 17, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+
+					Float fvalue = 0f;
+					if (!sixteenCell.isEmpty()) {
+						fvalue = Float.valueOf(sixteenCell);
+					}
+					Double dvalue = 0d;
+					if (!fifteenCell.isEmpty()) {
+						dvalue = Double.valueOf(fifteenCell);
+					}
+					String thirdValue = "";
+					if(isNumeric(thirdCell)) {
+						thirdValue = thirdCell;
+					}
+					PropertyDetails propertyDetails = PropertyDetails.builder().area(thirdValue).interestRate(dvalue)
+							.rentIncrementPeriod((int) Math.round(fvalue))
+							.rentIncrementPercentage(Double.valueOf(seventeenCell)).transitNumber(secondCell.substring(0,secondCell.length()-2))
+							.tenantId("ch.chandigarh")
+							.build();
+					Address address = Address.builder().area(fourthCell).pincode(fifthCell.substring(0, fifthCell.length()-2))
+							.tenantId("ch.chandigarh")
+							.transitNumber(secondCell.substring(0,secondCell.length()-2))
+							.build();
+					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell).phone(seventhCell)
+							.relation(eirthCell).fatherOrHusband(ninthCell).email(tenthCell).aadhaarNumber(eleventhCell)
+							.allotmentStartdate(convertStrDatetoLong(twelveCell))
+							.tenantId("ch.chandigarh")
+							.applicationType("MasterEntry")
+							.permanent(true)
+							.build();
+					if(convertStrDatetoLong(fourteenCell)==0) {
+						ownerDetails.setPosessionStartdate(null);
+					} else {
+						ownerDetails.setPosessionStartdate(convertStrDatetoLong(fourteenCell));
+					}
+					Owner owner = Owner.builder().allotmenNumber(thirteenCell).ownerDetails(ownerDetails)
+							.tenantId("ch.chandigarh")
+							.isPrimaryOwner(true)
+							.activeState(true)
+							.build();
+					Property property = Property.builder().colony(firstCell).transitNumber(secondCell.substring(0,secondCell.length()-2))
+							.propertyDetails(propertyDetails).address(address).owners(Collections.singleton(owner))
+							.ownerDetails(Collections.singleton(ownerDetails))
+							.tenantId("ch.chandigarh")
+							.masterDataState("PM_APPROVED")
+							.masterDataAction("APPROVE")
+							.build();
+
+					property.setCreatedBy("system");
+					owner.setCreatedBy("system");
+					ownerDetails.setCreatedBy("system");
+					propertyDetails.setCreatedBy("system");
+					address.setCreatedBy("system");
+					propertyDetails.setProperty(property);
+					address.setProperty(property);
+					owner.setProperty(property);
+					ownerDetails.setProperty(property);
+					ownerDetails.setOwner(owner);
+					
+					propertyDetails.setCurrentowner(owner);
+					owner.setPropertyDetails(propertyDetails);
+					propertyList.add(property);
+				}
+			}
+		}
+	}
+
+	private List<Property> saveProperties(List<Property> properties) {
+		properties.forEach(property -> {
+			propertyRepository.save(property);
+		});
+		return properties;
+	}
+
+	private Boolean isNumeric(String value) {
+		if (value != null && !value.matches("[1-9][0-9]*(\\.[0])?")) {
+			return false;
+		}
+		return true;
+	}
+}
