@@ -61,4 +61,28 @@ public class ReadExcelController {
 
 	}
 	
+	@PostMapping("/read_doc")
+	public ResponseEntity<List<Property>> readExcelforDoc(@Valid @ModelAttribute ExcelSearchCriteria searchCriteria) {
+		try {
+			log.info("Start controller method readExcel() Request:" + searchCriteria);
+			String filePath = fileStoreUtils.fetchFileStoreUrl(searchCriteria);
+			if (StringUtils.isBlank(filePath)) {
+				throw new Exception("Cannot find property file that is uploaded");
+			}
+			filePath = filePath.replaceAll(" ", "%20");
+			File tempFile = File.createTempFile("File" + System.currentTimeMillis(), ".xlsx");
+			FileUtils.copyURLToFile(new URI(filePath).toURL(), tempFile);
+			List<Property> propertyList = this.readExcelService.getDocFromExcel(tempFile, 2);
+			tempFile.delete();
+			log.info("End controller method readExcel property data:" + propertyList.size());
+			if (propertyList.size() == 0)
+				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
+
+			return new ResponseEntity<>(propertyList, HttpStatus.OK);
+		} catch (Exception e) {	
+			log.error("Error occurred during readExcel():" + e.getMessage(), e);
+			throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
+		}
+
+	}
 }
