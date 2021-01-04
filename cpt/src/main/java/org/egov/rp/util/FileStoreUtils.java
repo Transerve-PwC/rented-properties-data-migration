@@ -59,7 +59,7 @@ public class FileStoreUtils {
 
 	@SuppressWarnings("unchecked")
 	public List<HashMap<String, String>> uploadStreamToFileStore(ByteArrayOutputStream outputStream, String tenantId,
-			String fileName) throws UnsupportedEncodingException {
+			String fileName, String contentType) throws UnsupportedEncodingException {
 		StringBuilder uri = new StringBuilder(fileStoreUrl.substring(0, fileStoreUrl.length() - 4));
 
 		HttpHeaders headers = new HttpHeaders();
@@ -68,7 +68,7 @@ public class FileStoreUtils {
 		HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
 		body.add("filename", fileName);
-		//body.add("contentType", contentType);
+		body.add("contentType", contentType);
 
 		ByteArrayResource contentsAsResource = new ByteArrayResource(outputStream.toByteArray()) {
 			@Override

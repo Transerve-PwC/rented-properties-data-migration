@@ -63,6 +63,12 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	@Value("${file.location}")
 	private String fileLocation;
 
+	private static final String SYSTEM = "system";
+	private static final String TENANTID = "ch.chandigarh";
+	private static final String APPROVE = "APPROVE";
+	private static final String PM_APPROVED = "PM_APPROVED";
+	private static final String MASTERENTRY = "MasterEntry";
+
 	@Override
 	public List<Property> getDataFromExcel(File file, int sheetIndex) {
 		try {
@@ -113,12 +119,12 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		int index = 0;
 		while (iter.hasNext()) {
 			try (InputStream stream = iter.next()) {
-				 
+
 				if (index == sheetNo) {
 					SheetContentsProcessor processor = new SheetContentsProcessor();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(processor), stream);
 					if (!processor.propertyList.isEmpty()) {
-						 return saveProperties(processor.propertyList);
+						return saveProperties(processor.propertyList);
 					}
 				}
 				index++;
@@ -136,11 +142,11 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		int index = 0;
 		while (iter.hasNext()) {
 			try (InputStream stream = iter.next()) {
-				 //String sheetName = iter.getSheetName();
-				if(index == sheetNo) {
+				// String sheetName = iter.getSheetName();
+				if (index == sheetNo) {
 					SheetContentsProcessorDoc sheetContentsProcessorDoc = new SheetContentsProcessorDoc();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(sheetContentsProcessorDoc), stream);
-					if(!sheetContentsProcessorDoc.propertywithdoc.isEmpty()) {
+					if (!sheetContentsProcessorDoc.propertywithdoc.isEmpty()) {
 						return sheetContentsProcessorDoc.propertywithdoc;
 					}
 				}
@@ -149,7 +155,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		}
 		throw new CustomException("PARSE_ERROR", "Could not process sheet no " + sheetNo);
 	}
-	
+
 	protected Object getValueFromCell(Row row, int cellNo, Row.MissingCellPolicy cellPolicy) {
 		Cell cell1 = row.getCell(cellNo, cellPolicy);
 		Object objValue = "";
@@ -198,93 +204,91 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	}
 
 	private class SheetContentsProcessorDoc implements StreamingRowProcessor {
-		
+
 		List<Property> propertywithdoc = new ArrayList<>();
-		String transitNo="";
+		String transitNo = "";
+
 		@Override
 		public void processRow(Row row) {
 			File folder = new File(fileLocation);
 			String[] listOfFiles = folder.list();
 			List<String> filesList = Arrays.asList(listOfFiles);
-			
-			if(!filesList.isEmpty()) {
+
+			if (!filesList.isEmpty()) {
 				if (row.getRowNum() >= 2) {
 					String documentType = String
-							.valueOf(getValueFromCell(row, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
-							.trim();
-					if(!documentType.isEmpty()) {
-					  String transitSiteNo = String
-								.valueOf(getValueFromCell(row, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
-								.trim();
-					  
-					  Property property;
-					  String documentName = String
-								.valueOf(getValueFromCell(row, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
-								.trim();
-					  if(filesList.contains(documentName)) {
-						  
-						  if(!transitSiteNo.isEmpty()) {
-							  transitNo = transitSiteNo;
-							 
-							  property = propertyRepository.getPropertyByTransitNumber(transitSiteNo.substring(0, transitSiteNo.length()-2));
-							  } 
-						  else {
-								  property = propertyRepository.getPropertyByTransitNumber(transitNo.substring(0, transitNo.length()-2));
-							  }
-						 // System.out.println(documentName);
-						  byte[] bytes = null;
-						  List<HashMap<String, String>> response = null;
-						try {
-							bytes = Files.readAllBytes(Paths.get(folder+"/"+documentName));
-						    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-							outputStream.write(bytes);
-							response = fileStoreUtils.uploadStreamToFileStore(outputStream, property.getTenantId(), documentName);
-							//System.out.println(response);
-							//System.out.println(response.get(0).get("fileStoreId"));
-							outputStream.close();
-						} catch (IOException e) {
-							log.error("error while converting file into byte output stream");
+							.valueOf(getValueFromCell(row, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+					if (!documentType.isEmpty()) {
+						String transitSiteNo = String
+								.valueOf(getValueFromCell(row, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+						String contentType = String
+								.valueOf(getValueFromCell(row, 4, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+						if(contentType.equalsIgnoreCase("docx")) {
+							contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+						} else if(contentType.equalsIgnoreCase("pdf")) {
+							contentType = "application/msword,application/pdf";
+						} else if(contentType.equalsIgnoreCase("jpg")) {
+							contentType = "image/*";
 						}
-						if(property!=null) {
-							String docType="";
-							
-							if(documentType.contains("documents")) {
-								docType = "TRANSIT_SITE_DOCUMENTS";
-							} else if(documentType.contains("Transit site Images")) {
-								docType = "TRANSIT_SITE_IMAGES";
-							} else if(documentType.contains("Allotee Image")) {
-								docType = "ALLOTEE_IMAGE";
-							} else if(documentType.contains("Aadhar")) {
-								docType = "ALLOTEE_AADHAR";
-							} else if(documentType.contains("Building Plan")) {
-								docType = "APPROVED_BUILDING_PLAN";
+						Property property;
+						String documentName = String
+								.valueOf(getValueFromCell(row, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+						if (filesList.contains(documentName)) {
+
+							if (!transitSiteNo.isEmpty()) {
+								transitNo = transitSiteNo;
+
+								property = propertyRepository.getPropertyByTransitNumber(
+										transitSiteNo.substring(0, transitSiteNo.length() - 2));
+							} else {
+								property = propertyRepository
+										.getPropertyByTransitNumber(transitNo.substring(0, transitNo.length() - 2));
 							}
-						Document document = Document.builder()
-								.referenceId(property.getId())
-								.tenantId(property.getTenantId())
-								.active(true)
-								.documentType(docType)
-								.fileStoreId(response.get(0).get("fileStoreId"))
-								.build();
-						document.setCreatedBy("system");
-						document.setProperty(property);
-						property.setDocuments(document);
-						propertyRepository.save(property);
-						propertywithdoc.add(property);
+							byte[] bytes = null;
+							List<HashMap<String, String>> response = null;
+							try {
+								bytes = Files.readAllBytes(Paths.get(folder + "/" + documentName));
+								ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+								outputStream.write(bytes);
+								response = fileStoreUtils.uploadStreamToFileStore(outputStream, property.getTenantId(),
+										documentName, contentType);
+								outputStream.close();
+							} catch (IOException e) {
+								log.error("error while converting file into byte output stream");
+							}
+							if (property != null) {
+								String docType = "";
+
+								if (documentType.contains("documents")) {
+									docType = "TRANSIT_SITE_DOCUMENTS";
+								} else if (documentType.contains("Transit site Images")) {
+									docType = "TRANSIT_SITE_IMAGES";
+								} else if (documentType.contains("Allotee Image")) {
+									docType = "ALLOTEE_IMAGE";
+								} else if (documentType.contains("Aadhar")) {
+									docType = "ALLOTEE_AADHAR";
+								} else if (documentType.contains("Building Plan")) {
+									docType = "APPROVED_BUILDING_PLAN";
+								}
+								Document document = Document.builder().referenceId(property.getId())
+										.tenantId(property.getTenantId()).active(true).documentType(docType)
+										.fileStoreId(response.get(0).get("fileStoreId")).build();
+								document.setCreatedBy(SYSTEM);
+								document.setProperty(property);
+								property.setDocuments(document);
+								propertyRepository.save(property);
+								propertywithdoc.add(property);
+							}
 						}
-					  }
-					  }
-				  }
-				
+					}
+				}
+
 			}
-			
-				  
-			  
-			
+
 		}
-		
+
 	}
-	
+
 	private class SheetContentsProcessor implements StreamingRowProcessor {
 
 		List<Property> propertyList = new ArrayList<>();
@@ -357,67 +361,56 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 						dvalue = Double.valueOf(fifteenCell);
 					}
 					String thirdValue = "";
-					if(isNumeric(thirdCell)) {
+					if (isNumeric(thirdCell)) {
 						thirdValue = thirdCell;
 					}
 					PropertyDetails propertyDetails = PropertyDetails.builder().area(thirdValue).interestRate(dvalue)
 							.rentIncrementPeriod((int) Math.round(fvalue))
-							.rentIncrementPercentage(Double.valueOf(seventeenCell)).transitNumber(secondCell.substring(0,secondCell.length()-2))
-							.tenantId("ch.chandigarh")
+							.rentIncrementPercentage(Double.valueOf(seventeenCell))
+							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
 							.build();
-					Address address = Address.builder().area(fourthCell).pincode(fifthCell.substring(0, fifthCell.length()-2))
-							.tenantId("ch.chandigarh")
-							.transitNumber(secondCell.substring(0,secondCell.length()-2))
-							.build();
+					Address address = Address.builder().area(fourthCell)
+							.pincode(fifthCell.substring(0, fifthCell.length() - 2)).tenantId(TENANTID)
+							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).build();
 					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell).phone(seventhCell)
 							.relation(eirthCell).fatherOrHusband(ninthCell).email(tenthCell).aadhaarNumber(eleventhCell)
-							.allotmentStartdate(convertStrDatetoLong(twelveCell))
-							.tenantId("ch.chandigarh")
-							.applicationType("MasterEntry")
-							.permanent(true)
-							.build();
-					if(convertStrDatetoLong(fourteenCell)==0) {
+							.allotmentStartdate(convertStrDatetoLong(twelveCell)).tenantId(TENANTID)
+							.applicationType(MASTERENTRY).permanent(true).build();
+					if (convertStrDatetoLong(fourteenCell) == 0) {
 						ownerDetails.setPosessionStartdate(null);
 					} else {
 						ownerDetails.setPosessionStartdate(convertStrDatetoLong(fourteenCell));
 					}
 					Owner owner = Owner.builder().allotmenNumber(thirteenCell).ownerDetails(ownerDetails)
-							.tenantId("ch.chandigarh")
-							.isPrimaryOwner(true)
-							.activeState(true)
-							.build();
-					
-					String colonyCode="";
-					if(firstCell.contains("Milk")) {
+							.tenantId(TENANTID).isPrimaryOwner(true).activeState(true).build();
+
+					String colonyCode = "";
+					if (firstCell.contains("Milk")) {
 						colonyCode = "COLONY_MILK";
-					} else if(firstCell.contains("Kumhar")) {
+					} else if (firstCell.contains("Kumhar")) {
 						colonyCode = "COLONY_KUMHAR";
-					} else if(firstCell.contains("Sector 52-53")) {
+					} else if (firstCell.contains("Sector 52-53")) {
 						colonyCode = "COLONY_SECTOR_52_53";
-					} else if(firstCell.contains("Vikas Nagar")) {
+					} else if (firstCell.contains("Vikas Nagar")) {
 						colonyCode = "COLONY_VIKAS_NAGAR";
 					}
-					Property property = Property.builder()
-							.colony(colonyCode)
-							.transitNumber(secondCell.substring(0,secondCell.length()-2))
+					Property property = Property.builder().colony(colonyCode)
+							.transitNumber(secondCell.substring(0, secondCell.length() - 2))
 							.propertyDetails(propertyDetails).address(address).owners(Collections.singleton(owner))
-							.ownerDetails(Collections.singleton(ownerDetails))
-							.tenantId("ch.chandigarh")
-							.masterDataState("PM_APPROVED")
-							.masterDataAction("APPROVE")
-							.build();
+							.ownerDetails(Collections.singleton(ownerDetails)).tenantId(TENANTID)
+							.masterDataState(PM_APPROVED).masterDataAction(APPROVE).build();
 
-					property.setCreatedBy("system");
-					owner.setCreatedBy("system");
-					ownerDetails.setCreatedBy("system");
-					propertyDetails.setCreatedBy("system");
-					address.setCreatedBy("system");
+					property.setCreatedBy(SYSTEM);
+					owner.setCreatedBy(SYSTEM);
+					ownerDetails.setCreatedBy(SYSTEM);
+					propertyDetails.setCreatedBy(SYSTEM);
+					address.setCreatedBy(SYSTEM);
 					propertyDetails.setProperty(property);
 					address.setProperty(property);
 					owner.setProperty(property);
 					ownerDetails.setProperty(property);
 					ownerDetails.setOwner(owner);
-					
+
 					propertyDetails.setCurrentowner(owner);
 					owner.setPropertyDetails(propertyDetails);
 					propertyList.add(property);
@@ -430,12 +423,10 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		properties.forEach(property -> {
 			propertyRepository.save(property);
 		});
-		
+
 		return properties;
 	}
-	private List<Property> updateProperties(List<Property> properties) {
-		return propertyRepository.save(properties);
-	}
+
 	private Boolean isNumeric(String value) {
 		if (value != null && !value.matches("[1-9][0-9]*(\\.[0])?")) {
 			return false;

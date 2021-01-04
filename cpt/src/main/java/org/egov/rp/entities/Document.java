@@ -38,12 +38,6 @@ public class Document extends AuditDetails{
 	@Column(name = "id")
 	private String id;
 
-	/*
-	 * @ManyToOne(fetch = FetchType.LAZY)
-	 * 
-	 * @JoinColumn(name = "reference_id") private Property referenceProperty;
-	 */
-	
 	@Column(name = "reference_id")
 	private String referenceId;
 

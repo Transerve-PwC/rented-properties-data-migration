@@ -84,10 +84,5 @@ public class Property extends AuditDetails{
 			cascade = CascadeType.ALL,
 			mappedBy = "property"
 			)
-	//private Set<Document> documents = new HashSet<>();
 	private Document documents;
-	/*
-	 * @OneToMany( cascade = CascadeType.ALL, mappedBy = "referenceProperty" )
-	 * private Set<Document> referenceDocuments = new HashSet<>();
-	 */
 }
