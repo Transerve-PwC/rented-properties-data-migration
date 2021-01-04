@@ -221,15 +221,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					if (!documentType.isEmpty()) {
 						String transitSiteNo = String
 								.valueOf(getValueFromCell(row, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
-						String contentType = String
-								.valueOf(getValueFromCell(row, 4, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
-						if(contentType.equalsIgnoreCase("docx")) {
-							contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-						} else if(contentType.equalsIgnoreCase("pdf")) {
-							contentType = "application/msword,application/pdf";
-						} else if(contentType.equalsIgnoreCase("jpg")) {
-							contentType = "image/*";
-						}
+
 						Property property;
 						String documentName = String
 								.valueOf(getValueFromCell(row, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
@@ -250,8 +242,9 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								bytes = Files.readAllBytes(Paths.get(folder + "/" + documentName));
 								ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 								outputStream.write(bytes);
-								response = fileStoreUtils.uploadStreamToFileStore(outputStream, property.getTenantId(),
-										documentName, contentType);
+								String [] tenantId = property.getTenantId().split("\\.");
+								response = fileStoreUtils.uploadStreamToFileStore(outputStream, tenantId[0],
+										documentName);
 								outputStream.close();
 							} catch (IOException e) {
 								log.error("error while converting file into byte output stream");
