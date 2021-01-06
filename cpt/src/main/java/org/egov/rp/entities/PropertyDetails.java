@@ -85,10 +85,6 @@ public class PropertyDetails extends AuditDetails{
 	@Column(name = "rent_per_sqyd")
 	private String rentPerSqyd;
 
-	/*
-	 * @Column(name = "current_owner") private String currentOwner;
-	 */
-
 	@Column(name = "floors")
 	private String floors;
 

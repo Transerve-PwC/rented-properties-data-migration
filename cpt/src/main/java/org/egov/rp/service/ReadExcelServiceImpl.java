@@ -1,12 +1,17 @@
 package org.egov.rp.service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -27,6 +32,7 @@ import org.apache.poi.xssf.model.SharedStrings;
 import org.apache.poi.xssf.model.Styles;
 import org.apache.poi.xssf.model.StylesTable;
 import org.egov.rp.entities.Address;
+import org.egov.rp.entities.Document;
 import org.egov.rp.entities.Owner;
 import org.egov.rp.entities.OwnerDetails;
 import org.egov.rp.entities.Property;
@@ -35,6 +41,7 @@ import org.egov.rp.repository.PropertyRepository;
 import org.egov.rp.service.StreamingSheetContentsHandler.StreamingRowProcessor;
 import org.egov.tracer.model.CustomException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.InputSource;
@@ -50,11 +57,35 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	@Autowired
 	private PropertyRepository propertyRepository;
 
+	@Autowired
+	private org.egov.rp.util.FileStoreUtils fileStoreUtils;
+
+	@Value("${file.location}")
+	private String fileLocation;
+
+	private static final String SYSTEM = "system";
+	private static final String TENANTID = "ch.chandigarh";
+	private static final String APPROVE = "APPROVE";
+	private static final String PM_APPROVED = "PM_APPROVED";
+	private static final String MASTERENTRY = "MasterEntry";
+
 	@Override
 	public List<Property> getDataFromExcel(File file, int sheetIndex) {
 		try {
 			OPCPackage opcPackage = OPCPackage.open(file);
 			return this.process(opcPackage, sheetIndex);
+		} catch (IOException | OpenXML4JException | SAXException e) {
+			log.error("Error while parsing Excel", e);
+			throw new CustomException("PARSE_ERROR", "Could not parse excel. Error is " + e.getMessage());
+		}
+
+	}
+
+	@Override
+	public List<Property> getDocFromExcel(File file, int sheetIndex) {
+		try {
+			OPCPackage opcPackage = OPCPackage.open(file);
+			return this.processDoc(opcPackage, sheetIndex);
 		} catch (IOException | OpenXML4JException | SAXException e) {
 			log.error("Error while parsing Excel", e);
 			throw new CustomException("PARSE_ERROR", "Could not parse excel. Error is " + e.getMessage());
@@ -88,12 +119,35 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		int index = 0;
 		while (iter.hasNext()) {
 			try (InputStream stream = iter.next()) {
-				// String sheetName = iter.getSheetName();
+
 				if (index == sheetNo) {
 					SheetContentsProcessor processor = new SheetContentsProcessor();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(processor), stream);
 					if (!processor.propertyList.isEmpty()) {
 						return saveProperties(processor.propertyList);
+					}
+				}
+				index++;
+			}
+		}
+		throw new CustomException("PARSE_ERROR", "Could not process sheet no " + sheetNo);
+	}
+
+	private List<Property> processDoc(OPCPackage xlsxPackage, int sheetNo)
+			throws IOException, OpenXML4JException, SAXException, CustomException {
+		ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage);
+		XSSFReader xssfReader = new XSSFReader(xlsxPackage);
+		StylesTable styles = xssfReader.getStylesTable();
+		XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
+		int index = 0;
+		while (iter.hasNext()) {
+			try (InputStream stream = iter.next()) {
+				// String sheetName = iter.getSheetName();
+				if (index == sheetNo) {
+					SheetContentsProcessorDoc sheetContentsProcessorDoc = new SheetContentsProcessorDoc();
+					processSheet(styles, strings, new StreamingSheetContentsHandler(sheetContentsProcessorDoc), stream);
+					if (!sheetContentsProcessorDoc.propertywithdoc.isEmpty()) {
+						return sheetContentsProcessorDoc.propertywithdoc;
 					}
 				}
 				index++;
@@ -147,6 +201,85 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 			log.error("Date parsing issue occur :" + e.getMessage());
 		}
 		return 0;
+	}
+
+	private class SheetContentsProcessorDoc implements StreamingRowProcessor {
+
+		List<Property> propertywithdoc = new ArrayList<>();
+		String transitNo = "";
+
+		@Override
+		public void processRow(Row row) {
+			File folder = new File(fileLocation);
+			String[] listOfFiles = folder.list();
+			List<String> filesList = Arrays.asList(listOfFiles);
+
+			if (!filesList.isEmpty()) {
+				if (row.getRowNum() >= 2) {
+					String documentType = String
+							.valueOf(getValueFromCell(row, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+					if (!documentType.isEmpty()) {
+						String transitSiteNo = String
+								.valueOf(getValueFromCell(row, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+
+						Property property;
+						String documentName = String
+								.valueOf(getValueFromCell(row, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+						if (filesList.contains(documentName)) {
+
+							if (!transitSiteNo.isEmpty()) {
+								transitNo = transitSiteNo;
+
+								property = propertyRepository.getPropertyByTransitNumber(
+										transitSiteNo.substring(0, transitSiteNo.length() - 2));
+							} else {
+								property = propertyRepository
+										.getPropertyByTransitNumber(transitNo.substring(0, transitNo.length() - 2));
+							}
+							byte[] bytes = null;
+							List<HashMap<String, String>> response = null;
+							try {
+								bytes = Files.readAllBytes(Paths.get(folder + "/" + documentName));
+								ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+								outputStream.write(bytes);
+								String [] tenantId = property.getTenantId().split("\\.");
+								response = fileStoreUtils.uploadStreamToFileStore(outputStream, tenantId[0],
+										documentName);
+								outputStream.close();
+							} catch (IOException e) {
+								log.error("error while converting file into byte output stream");
+							}
+							if (property != null) {
+								String docType = "";
+
+								if (documentType.contains("documents")) {
+									docType = "TRANSIT_SITE_DOCUMENTS";
+								} else if (documentType.contains("Transit site Images")) {
+									docType = "TRANSIT_SITE_IMAGES";
+								} else if (documentType.contains("Allotee Image")) {
+									docType = "ALLOTEE_IMAGE";
+								} else if (documentType.contains("Aadhar")) {
+									docType = "ALLOTEE_AADHAR";
+								} else if (documentType.contains("Building Plan")) {
+									docType = "APPROVED_BUILDING_PLAN";
+								}
+								Document document = Document.builder().referenceId(property.getId())
+										.tenantId(property.getTenantId()).active(true).documentType(docType)
+										.fileStoreId(response.get(0).get("fileStoreId")).build();
+								document.setCreatedBy(SYSTEM);
+								document.setProperty(property);
+								property.setDocuments(document);
+								propertyRepository.save(property);
+								propertywithdoc.add(property);
+							}
+						}
+					}
+				}
+
+			}
+
+		}
+
 	}
 
 	private class SheetContentsProcessor implements StreamingRowProcessor {
@@ -211,7 +344,6 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					String seventeenCell = String
 							.valueOf(getValueFromCell(currentRow, 17, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
 							.trim();
-
 					Float fvalue = 0f;
 					if (!sixteenCell.isEmpty()) {
 						fvalue = Float.valueOf(sixteenCell);
@@ -221,54 +353,67 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 						dvalue = Double.valueOf(fifteenCell);
 					}
 					String thirdValue = "";
-					if(isNumeric(thirdCell)) {
+					if (isNumeric(thirdCell)) {
 						thirdValue = thirdCell;
 					}
 					PropertyDetails propertyDetails = PropertyDetails.builder().area(thirdValue).interestRate(dvalue)
 							.rentIncrementPeriod((int) Math.round(fvalue))
-							.rentIncrementPercentage(Double.valueOf(seventeenCell)).transitNumber(secondCell.substring(0,secondCell.length()-2))
-							.tenantId("ch.chandigarh")
+							.rentIncrementPercentage(Double.valueOf(seventeenCell))
+							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
 							.build();
-					Address address = Address.builder().area(fourthCell).pincode(fifthCell.substring(0, fifthCell.length()-2))
-							.tenantId("ch.chandigarh")
-							.transitNumber(secondCell.substring(0,secondCell.length()-2))
-							.build();
-					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell).phone(seventhCell)
-							.relation(eirthCell).fatherOrHusband(ninthCell).email(tenthCell).aadhaarNumber(eleventhCell)
-							.allotmentStartdate(convertStrDatetoLong(twelveCell))
-							.tenantId("ch.chandigarh")
-							.applicationType("MasterEntry")
-							.permanent(true)
-							.build();
-					if(convertStrDatetoLong(fourteenCell)==0) {
+					Address address = Address.builder().area(fourthCell)
+							.pincode(fifthCell.substring(0, fifthCell.length() - 2)).tenantId(TENANTID)
+							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).build();
+					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell)
+							.phone(seventhCell.substring(1, seventhCell.length()-1))
+							.relation(eirthCell).fatherOrHusband(ninthCell)
+							.allotmentStartdate(convertStrDatetoLong(twelveCell)).tenantId(TENANTID)
+							.applicationType(MASTERENTRY).permanent(true).build();
+					if(tenthCell.equalsIgnoreCase("na")) {
+						ownerDetails.setEmail(null);
+					} else {
+						ownerDetails.setEmail(tenthCell);
+					}
+					if(eleventhCell.equalsIgnoreCase("na")) {
+						ownerDetails.setAadhaarNumber(null);
+					} else {
+						ownerDetails.setAadhaarNumber(eleventhCell.substring(1, eleventhCell.length()-1));
+					}
+					if (convertStrDatetoLong(fourteenCell) == 0) {
 						ownerDetails.setPosessionStartdate(null);
 					} else {
 						ownerDetails.setPosessionStartdate(convertStrDatetoLong(fourteenCell));
 					}
 					Owner owner = Owner.builder().allotmenNumber(thirteenCell).ownerDetails(ownerDetails)
-							.tenantId("ch.chandigarh")
-							.isPrimaryOwner(true)
-							.activeState(true)
-							.build();
-					Property property = Property.builder().colony(firstCell).transitNumber(secondCell.substring(0,secondCell.length()-2))
-							.propertyDetails(propertyDetails).address(address).owners(Collections.singleton(owner))
-							.ownerDetails(Collections.singleton(ownerDetails))
-							.tenantId("ch.chandigarh")
-							.masterDataState("PM_APPROVED")
-							.masterDataAction("APPROVE")
-							.build();
+							.tenantId(TENANTID).isPrimaryOwner(true).activeState(true).build();
 
-					property.setCreatedBy("system");
-					owner.setCreatedBy("system");
-					ownerDetails.setCreatedBy("system");
-					propertyDetails.setCreatedBy("system");
-					address.setCreatedBy("system");
+					String colonyCode = "";
+					if (firstCell.contains("Milk")) {
+						colonyCode = "COLONY_MILK";
+					} else if (firstCell.contains("Kumhar")) {
+						colonyCode = "COLONY_KUMHAR";
+					} else if (firstCell.contains("Sector 52-53")) {
+						colonyCode = "COLONY_SECTOR_52_53";
+					} else if (firstCell.contains("Vikas Nagar")) {
+						colonyCode = "COLONY_VIKAS_NAGAR";
+					}
+					Property property = Property.builder().colony(colonyCode)
+							.transitNumber(secondCell.substring(0, secondCell.length() - 2))
+							.propertyDetails(propertyDetails).address(address).owners(Collections.singleton(owner))
+							.ownerDetails(Collections.singleton(ownerDetails)).tenantId(TENANTID)
+							.masterDataState(PM_APPROVED).masterDataAction(APPROVE).build();
+
+					property.setCreatedBy(SYSTEM);
+					owner.setCreatedBy(SYSTEM);
+					ownerDetails.setCreatedBy(SYSTEM);
+					propertyDetails.setCreatedBy(SYSTEM);
+					address.setCreatedBy(SYSTEM);
 					propertyDetails.setProperty(property);
 					address.setProperty(property);
 					owner.setProperty(property);
 					ownerDetails.setProperty(property);
 					ownerDetails.setOwner(owner);
-					
+
 					propertyDetails.setCurrentowner(owner);
 					owner.setPropertyDetails(propertyDetails);
 					propertyList.add(property);
@@ -281,6 +426,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		properties.forEach(property -> {
 			propertyRepository.save(property);
 		});
+
 		return properties;
 	}
 

@@ -23,7 +23,6 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-//@Builder
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
 public class AuditDetails {
