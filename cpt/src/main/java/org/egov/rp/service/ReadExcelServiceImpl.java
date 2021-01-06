@@ -344,7 +344,6 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					String seventeenCell = String
 							.valueOf(getValueFromCell(currentRow, 17, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
 							.trim();
-
 					Float fvalue = 0f;
 					if (!sixteenCell.isEmpty()) {
 						fvalue = Float.valueOf(sixteenCell);
@@ -365,10 +364,21 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					Address address = Address.builder().area(fourthCell)
 							.pincode(fifthCell.substring(0, fifthCell.length() - 2)).tenantId(TENANTID)
 							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).build();
-					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell).phone(seventhCell)
-							.relation(eirthCell).fatherOrHusband(ninthCell).email(tenthCell).aadhaarNumber(eleventhCell)
+					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell)
+							.phone(seventhCell.substring(1, seventhCell.length()-1))
+							.relation(eirthCell).fatherOrHusband(ninthCell)
 							.allotmentStartdate(convertStrDatetoLong(twelveCell)).tenantId(TENANTID)
 							.applicationType(MASTERENTRY).permanent(true).build();
+					if(tenthCell.equalsIgnoreCase("na")) {
+						ownerDetails.setEmail(null);
+					} else {
+						ownerDetails.setEmail(tenthCell);
+					}
+					if(eleventhCell.equalsIgnoreCase("na")) {
+						ownerDetails.setAadhaarNumber(null);
+					} else {
+						ownerDetails.setAadhaarNumber(eleventhCell.substring(1, eleventhCell.length()-1));
+					}
 					if (convertStrDatetoLong(fourteenCell) == 0) {
 						ownerDetails.setPosessionStartdate(null);
 					} else {
