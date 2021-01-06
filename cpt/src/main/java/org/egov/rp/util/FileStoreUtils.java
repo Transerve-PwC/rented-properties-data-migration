@@ -6,10 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.egov.rp.models.ExcelSearchCriteria;
-import org.egov.tracer.model.CustomException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -33,28 +30,6 @@ public class FileStoreUtils {
 	public FileStoreUtils(RestTemplate restTemplate) {
 		super();
 		this.restTemplate = restTemplate;
-	}
-
-	@Cacheable(value = "fileUrl", sync = true)
-	@SuppressWarnings("unchecked")
-	public String fetchFileStoreUrl(ExcelSearchCriteria searchCriteria) {
-		StringBuilder uri = new StringBuilder(fileStoreUrl);
-		String stateLevelTenantId = this.getStateLevelTenantId(searchCriteria.getTenantId());
-		uri.append("?tenantId=" + stateLevelTenantId + "&fileStoreIds=" + searchCriteria.getFileStoreId());
-		Map<String, Object> response = (Map<String, Object>) (restTemplate.getForObject(uri.toString(), HashMap.class));
-		if (!response.containsKey(searchCriteria.getFileStoreId())) {
-			throw new CustomException("FILE_NOT_FOUND", String.format("File store id %s not found with tenant id %s",
-					searchCriteria.getFileStoreId(), stateLevelTenantId));
-		}
-		return String.valueOf(response.get(searchCriteria.getFileStoreId()));
-	}
-
-	private String getStateLevelTenantId(String tenantId) {
-		String[] components = tenantId.split(".");
-		if (components.length == 0) {
-			return "ch";
-		}
-		return components[0];
 	}
 
 	@SuppressWarnings("unchecked")

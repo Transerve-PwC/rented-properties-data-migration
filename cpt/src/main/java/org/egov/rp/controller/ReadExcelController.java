@@ -1,24 +1,17 @@
 package org.egov.rp.controller;
 
 import java.io.File;
-import java.net.URI;
 import java.util.List;
 
-import javax.validation.Valid;
-
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.egov.rp.entities.Property;
-import org.egov.rp.models.ExcelSearchCriteria;
 import org.egov.rp.service.ReadExcelService;
-import org.egov.rp.util.FileStoreUtils;
 import org.egov.tracer.model.CustomException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
