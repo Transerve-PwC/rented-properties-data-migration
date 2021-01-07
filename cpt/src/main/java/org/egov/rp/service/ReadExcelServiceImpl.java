@@ -70,7 +70,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	private static final String MASTERENTRY = "MasterEntry";
 
 	@Override
-	public List<Property> getDataFromExcel(File file, int sheetIndex) {
+	public int getDataFromExcel(File file, int sheetIndex) {
 		try {
 			OPCPackage opcPackage = OPCPackage.open(file);
 			return this.process(opcPackage, sheetIndex);
@@ -82,7 +82,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	}
 
 	@Override
-	public List<Property> getDocFromExcel(File file, int sheetIndex) {
+	public int getDocFromExcel(File file, int sheetIndex) {
 		try {
 			OPCPackage opcPackage = OPCPackage.open(file);
 			return this.processDoc(opcPackage, sheetIndex);
@@ -110,7 +110,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		}
 	}
 
-	private List<Property> process(OPCPackage xlsxPackage, int sheetNo)
+	private int process(OPCPackage xlsxPackage, int sheetNo)
 			throws IOException, OpenXML4JException, SAXException, CustomException {
 		ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage);
 		XSSFReader xssfReader = new XSSFReader(xlsxPackage);
@@ -133,7 +133,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		throw new CustomException("PARSE_ERROR", "Could not process sheet no " + sheetNo);
 	}
 
-	private List<Property> processDoc(OPCPackage xlsxPackage, int sheetNo)
+	private int processDoc(OPCPackage xlsxPackage, int sheetNo)
 			throws IOException, OpenXML4JException, SAXException, CustomException {
 		ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage);
 		XSSFReader xssfReader = new XSSFReader(xlsxPackage);
@@ -147,7 +147,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					SheetContentsProcessorDoc sheetContentsProcessorDoc = new SheetContentsProcessorDoc();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(sheetContentsProcessorDoc), stream);
 					if (!sheetContentsProcessorDoc.propertywithdoc.isEmpty()) {
-						return sheetContentsProcessorDoc.propertywithdoc;
+						return sheetContentsProcessorDoc.propertywithdoc.size();
 					}
 				}
 				index++;
@@ -422,12 +422,12 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		}
 	}
 
-	private List<Property> saveProperties(List<Property> properties) {
+	private int saveProperties(List<Property> properties) {
 		properties.forEach(property -> {
 			propertyRepository.save(property);
 		});
 
-		return properties;
+		return properties.size();
 	}
 
 	private Boolean isNumeric(String value) {
