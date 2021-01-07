@@ -1,10 +1,9 @@
 package org.egov.rp.controller;
 
 import java.io.File;
-import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
-import org.egov.rp.entities.Property;
+import org.egov.rp.model.PropertyResponse;
 import org.egov.rp.service.ReadExcelService;
 import org.egov.tracer.model.CustomException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +31,7 @@ public class ReadExcelController {
 		this.readExcelService = readExcelService;
 	}
 	@PostMapping("/read")
-	public ResponseEntity<List<Property>> readExcel() {
+	public ResponseEntity<?> readExcel() {
 		try {
 			log.info("Start controller method readExcel() Request:" + filePath);
 			if (StringUtils.isBlank(filePath)) {
@@ -42,12 +41,13 @@ public class ReadExcelController {
 			if(!tempFile.exists()) {
 				throw new CustomException("FILE_NOT_FOUND", "File not found in resource folder");
 			}
-			List<Property> propertyList = this.readExcelService.getDataFromExcel(tempFile, 1);
-			log.info("End controller method readExcel property data:" + propertyList.size());
-			if (propertyList.size() == 0)
+			int propertySize = this.readExcelService.getDataFromExcel(tempFile, 1);
+			PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(propertySize).build();
+			log.info("End controller method readExcel property inserted:" + propertyResponse.getGeneratedCount());
+			if (propertySize == 0)
 				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
 
-			return new ResponseEntity<>(propertyList, HttpStatus.OK);
+			return new ResponseEntity<>(propertyResponse, HttpStatus.OK);
 		} catch (Exception e) {	
 			log.error("Error occurred during readExcel():" + e.getMessage(), e);
 			throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
@@ -56,9 +56,9 @@ public class ReadExcelController {
 	}
 	
 	@PostMapping("/read_doc")
-	public ResponseEntity<List<Property>> readExcelforDoc() {
+	public ResponseEntity<?> readExcelforDoc() {
 		try {
-			log.info("Start controller method readExcel() Request:" + filePath);
+			log.info("Start controller method readExcelforDoc() Request:" + filePath);
 			if (StringUtils.isBlank(filePath)) {
 				throw new Exception("Cannot find property file that is uploaded");
 			}
@@ -66,12 +66,13 @@ public class ReadExcelController {
 			if(!tempFile.exists()) {
 				throw new CustomException("FILE_NOT_FOUND", "File not found in resource folder");
 			}
-			List<Property> propertyList = this.readExcelService.getDocFromExcel(tempFile, 2);
-			log.info("End controller method readExcel property data:" + propertyList.size());
-			if (propertyList.size() == 0)
+			int propertySize = this.readExcelService.getDocFromExcel(tempFile, 2);
+			PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(propertySize).build();
+			log.info("End controller method readExcelforDoc property document inserted:" + propertyResponse.getGeneratedCount());
+			if (propertySize == 0)
 				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
 
-			return new ResponseEntity<>(propertyList, HttpStatus.OK);
+			return new ResponseEntity<>(propertyResponse, HttpStatus.OK);
 		} catch (Exception e) {	
 			log.error("Error occurred during readExcel():" + e.getMessage(), e);
 			throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
