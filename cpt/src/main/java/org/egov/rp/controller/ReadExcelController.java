@@ -41,10 +41,9 @@ public class ReadExcelController {
 			if(!tempFile.exists()) {
 				throw new CustomException("FILE_NOT_FOUND", "File not found in resource folder");
 			}
-			int propertySize = this.readExcelService.getDataFromExcel(tempFile, 1);
-			PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(propertySize).build();
+			PropertyResponse propertyResponse = this.readExcelService.getDataFromExcel(tempFile, 1);
 			log.info("End controller method readExcel property inserted:" + propertyResponse.getGeneratedCount());
-			if (propertySize == 0)
+			if (propertyResponse.getGeneratedCount() == 0)
 				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
 
 			return new ResponseEntity<>(propertyResponse, HttpStatus.OK);
@@ -66,10 +65,9 @@ public class ReadExcelController {
 			if(!tempFile.exists()) {
 				throw new CustomException("FILE_NOT_FOUND", "File not found in resource folder");
 			}
-			int propertySize = this.readExcelService.getDocFromExcel(tempFile, 2);
-			PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(propertySize).build();
+			PropertyResponse propertyResponse = this.readExcelService.getDocFromExcel(tempFile, 2);
 			log.info("End controller method readExcelforDoc property document inserted:" + propertyResponse.getGeneratedCount());
-			if (propertySize == 0)
+			if (propertyResponse.getGeneratedCount() == 0)
 				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
 
 			return new ResponseEntity<>(propertyResponse, HttpStatus.OK);

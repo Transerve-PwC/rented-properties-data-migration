@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -37,6 +38,7 @@ import org.egov.rp.entities.Owner;
 import org.egov.rp.entities.OwnerDetails;
 import org.egov.rp.entities.Property;
 import org.egov.rp.entities.PropertyDetails;
+import org.egov.rp.model.PropertyResponse;
 import org.egov.rp.repository.PropertyRepository;
 import org.egov.rp.service.StreamingSheetContentsHandler.StreamingRowProcessor;
 import org.egov.tracer.model.CustomException;
@@ -70,7 +72,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	private static final String MASTERENTRY = "MasterEntry";
 
 	@Override
-	public int getDataFromExcel(File file, int sheetIndex) {
+	public PropertyResponse getDataFromExcel(File file, int sheetIndex) {
 		try {
 			OPCPackage opcPackage = OPCPackage.open(file);
 			return this.process(opcPackage, sheetIndex);
@@ -82,7 +84,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	}
 
 	@Override
-	public int getDocFromExcel(File file, int sheetIndex) {
+	public PropertyResponse getDocFromExcel(File file, int sheetIndex) {
 		try {
 			OPCPackage opcPackage = OPCPackage.open(file);
 			return this.processDoc(opcPackage, sheetIndex);
@@ -110,7 +112,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		}
 	}
 
-	private int process(OPCPackage xlsxPackage, int sheetNo)
+	private PropertyResponse process(OPCPackage xlsxPackage, int sheetNo)
 			throws IOException, OpenXML4JException, SAXException, CustomException {
 		ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage);
 		XSSFReader xssfReader = new XSSFReader(xlsxPackage);
@@ -124,7 +126,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					SheetContentsProcessor processor = new SheetContentsProcessor();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(processor), stream);
 					if (!processor.propertyList.isEmpty()) {
-						return saveProperties(processor.propertyList);
+						return saveProperties(processor.propertyList, processor.nonPropertyCount);
 					}
 				}
 				index++;
@@ -133,7 +135,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 		throw new CustomException("PARSE_ERROR", "Could not process sheet no " + sheetNo);
 	}
 
-	private int processDoc(OPCPackage xlsxPackage, int sheetNo)
+	private PropertyResponse processDoc(OPCPackage xlsxPackage, int sheetNo)
 			throws IOException, OpenXML4JException, SAXException, CustomException {
 		ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage);
 		XSSFReader xssfReader = new XSSFReader(xlsxPackage);
@@ -147,7 +149,10 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					SheetContentsProcessorDoc sheetContentsProcessorDoc = new SheetContentsProcessorDoc();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(sheetContentsProcessorDoc), stream);
 					if (!sheetContentsProcessorDoc.propertywithdoc.isEmpty()) {
-						return sheetContentsProcessorDoc.propertywithdoc.size();
+						PropertyResponse propertyResponse = PropertyResponse.builder()
+								.generatedCount(sheetContentsProcessorDoc.propertywithdoc.size())
+								.nonGeneratedCount(sheetContentsProcessorDoc.nonPropertyCount).build();
+						return propertyResponse;
 					}
 				}
 				index++;
@@ -207,6 +212,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 
 		List<Property> propertywithdoc = new ArrayList<>();
 		String transitNo = "";
+		AtomicInteger nonPropertyCount = new AtomicInteger(0);
 
 		@Override
 		public void processRow(Row row) {
@@ -236,6 +242,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								property = propertyRepository
 										.getPropertyByTransitNumber(transitNo.substring(0, transitNo.length() - 2));
 							}
+							if (property != null) {
 							byte[] bytes = null;
 							List<HashMap<String, String>> response = null;
 							try {
@@ -249,7 +256,6 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							} catch (IOException e) {
 								log.error("error while converting file into byte output stream");
 							}
-							if (property != null) {
 								String docType = "";
 
 								if (documentType.contains("documents")) {
@@ -271,6 +277,9 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								property.setDocuments(document);
 								propertyRepository.save(property);
 								propertywithdoc.add(property);
+							} else {
+								nonPropertyCount.getAndIncrement();
+								log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it does not exists.");
 							}
 						}
 					}
@@ -285,17 +294,22 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	private class SheetContentsProcessor implements StreamingRowProcessor {
 
 		List<Property> propertyList = new ArrayList<>();
+		AtomicInteger nonPropertyCount = new AtomicInteger(0);
 
 		@Override
 		public void processRow(Row currentRow) {
 
 			if (currentRow.getRowNum() >= 7) {
 				if (currentRow.getCell(2) != null) {
-					String firstCell = String
-							.valueOf(getValueFromCell(currentRow, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
-							.trim();
+
 					String secondCell = String
 							.valueOf(getValueFromCell(currentRow, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
+							.trim();
+					Property propertyDb = propertyRepository
+							.getPropertyByTransitNumber(secondCell.substring(0, secondCell.length() - 2));
+					if (propertyDb == null) {
+					String firstCell = String
+							.valueOf(getValueFromCell(currentRow, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
 							.trim();
 					String thirdCell = String
 							.valueOf(getValueFromCell(currentRow, 3, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
@@ -344,90 +358,110 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					String seventeenCell = String
 							.valueOf(getValueFromCell(currentRow, 17, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
 							.trim();
-					Float fvalue = 0f;
-					if (!sixteenCell.isEmpty()) {
-						fvalue = Float.valueOf(sixteenCell);
-					}
-					Double dvalue = 0d;
-					if (!fifteenCell.isEmpty()) {
-						dvalue = Double.valueOf(fifteenCell);
-					}
-					String thirdValue = "";
-					if (isNumeric(thirdCell)) {
-						thirdValue = thirdCell;
-					}
-					PropertyDetails propertyDetails = PropertyDetails.builder().area(thirdValue).interestRate(dvalue)
-							.rentIncrementPeriod((int) Math.round(fvalue))
-							.rentIncrementPercentage(Double.valueOf(seventeenCell))
-							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
-							.build();
-					Address address = Address.builder().area(fourthCell)
-							.pincode(fifthCell.substring(0, fifthCell.length() - 2)).tenantId(TENANTID)
-							.transitNumber(secondCell.substring(0, secondCell.length() - 2)).build();
-					OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell)
-							.phone(seventhCell.substring(1, seventhCell.length()-1))
-							.relation(eirthCell).fatherOrHusband(ninthCell)
-							.allotmentStartdate(convertStrDatetoLong(twelveCell)).tenantId(TENANTID)
-							.applicationType(MASTERENTRY).permanent(true).build();
-					if(tenthCell.equalsIgnoreCase("na")) {
-						ownerDetails.setEmail(null);
-					} else {
-						ownerDetails.setEmail(tenthCell);
-					}
-					if(eleventhCell.equalsIgnoreCase("na")) {
-						ownerDetails.setAadhaarNumber(null);
-					} else {
-						ownerDetails.setAadhaarNumber(eleventhCell.substring(1, eleventhCell.length()-1));
-					}
-					if (convertStrDatetoLong(fourteenCell) == 0) {
-						ownerDetails.setPosessionStartdate(null);
-					} else {
-						ownerDetails.setPosessionStartdate(convertStrDatetoLong(fourteenCell));
-					}
-					Owner owner = Owner.builder().allotmenNumber(thirteenCell).ownerDetails(ownerDetails)
-							.tenantId(TENANTID).isPrimaryOwner(true).activeState(true).build();
 
-					String colonyCode = "";
-					if (firstCell.contains("Milk")) {
-						colonyCode = "COLONY_MILK";
-					} else if (firstCell.contains("Kumhar")) {
-						colonyCode = "COLONY_KUMHAR";
-					} else if (firstCell.contains("Sector 52-53")) {
-						colonyCode = "COLONY_SECTOR_52_53";
-					} else if (firstCell.contains("Vikas Nagar")) {
-						colonyCode = "COLONY_VIKAS_NAGAR";
+					if (isNumeric(secondCell)) {
+						if (isNumeric(thirdCell) && isNumeric(fifthCell)
+								&& isNumeric(seventhCell.substring(1, seventhCell.length() - 1))) {
+
+							Float fvalue = 0f;
+							if (!sixteenCell.isEmpty()) {
+								fvalue = Float.valueOf(sixteenCell);
+							}
+							Double dvalue = 0d;
+							if (!fifteenCell.isEmpty()) {
+								dvalue = Double.valueOf(fifteenCell);
+							}
+							String thirdValue = "";
+							if (isNumeric(thirdCell)) {
+								thirdValue = thirdCell;
+							}
+							PropertyDetails propertyDetails = PropertyDetails.builder().area(thirdValue)
+									.interestRate(dvalue).rentIncrementPeriod((int) Math.round(fvalue))
+									.rentIncrementPercentage(Double.valueOf(seventeenCell))
+									.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
+									.build();
+							Address address = Address.builder().area(fourthCell)
+									.pincode(fifthCell.substring(0, fifthCell.length() - 2)).tenantId(TENANTID)
+									.transitNumber(secondCell.substring(0, secondCell.length() - 2)).build();
+							OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell)
+									.phone(seventhCell.substring(1, seventhCell.length() - 1)).relation(eirthCell)
+									.fatherOrHusband(ninthCell).allotmentStartdate(convertStrDatetoLong(twelveCell))
+									.tenantId(TENANTID).applicationType(MASTERENTRY).permanent(true).build();
+							if (tenthCell.equalsIgnoreCase("na")) {
+								ownerDetails.setEmail(null);
+							} else {
+								ownerDetails.setEmail(tenthCell);
+							}
+							if (eleventhCell.equalsIgnoreCase("na")) {
+								ownerDetails.setAadhaarNumber(null);
+							} else {
+								ownerDetails.setAadhaarNumber(eleventhCell.substring(1, eleventhCell.length() - 1));
+							}
+							if (convertStrDatetoLong(fourteenCell) == 0) {
+								ownerDetails.setPosessionStartdate(null);
+							} else {
+								ownerDetails.setPosessionStartdate(convertStrDatetoLong(fourteenCell));
+							}
+							Owner owner = Owner.builder().allotmenNumber(thirteenCell).ownerDetails(ownerDetails)
+									.tenantId(TENANTID).isPrimaryOwner(true).activeState(true).build();
+
+							String colonyCode = "";
+							if (firstCell.contains("Milk")) {
+								colonyCode = "COLONY_MILK";
+							} else if (firstCell.contains("Kumhar")) {
+								colonyCode = "COLONY_KUMHAR";
+							} else if (firstCell.contains("Sector 52-53")) {
+								colonyCode = "COLONY_SECTOR_52_53";
+							} else if (firstCell.contains("Vikas Nagar")) {
+								colonyCode = "COLONY_VIKAS_NAGAR";
+							}
+							Property property = Property.builder().colony(colonyCode)
+									.transitNumber(secondCell.substring(0, secondCell.length() - 2))
+									.propertyDetails(propertyDetails).address(address)
+									.owners(Collections.singleton(owner))
+									.ownerDetails(Collections.singleton(ownerDetails)).tenantId(TENANTID)
+									.masterDataState(PM_APPROVED).masterDataAction(APPROVE).build();
+
+							property.setCreatedBy(SYSTEM);
+							owner.setCreatedBy(SYSTEM);
+							ownerDetails.setCreatedBy(SYSTEM);
+							propertyDetails.setCreatedBy(SYSTEM);
+							address.setCreatedBy(SYSTEM);
+							propertyDetails.setProperty(property);
+							address.setProperty(property);
+							owner.setProperty(property);
+							ownerDetails.setProperty(property);
+							ownerDetails.setOwner(owner);
+
+							propertyDetails.setCurrentowner(owner);
+							owner.setPropertyDetails(propertyDetails);
+							propertyList.add(property);
+						} else {
+							nonPropertyCount.getAndIncrement();
+							log.error("We are skipping uploading property for transit number: "
+									+ secondCell.substring(0, secondCell.length() - 2) + " because of incorrect data.");
+						}
+					} else {
+						nonPropertyCount.getAndIncrement();
+						log.error("We are skipping uploading property for transit number: " + secondCell
+								+ " because of incorrect transit number.");
 					}
-					Property property = Property.builder().colony(colonyCode)
-							.transitNumber(secondCell.substring(0, secondCell.length() - 2))
-							.propertyDetails(propertyDetails).address(address).owners(Collections.singleton(owner))
-							.ownerDetails(Collections.singleton(ownerDetails)).tenantId(TENANTID)
-							.masterDataState(PM_APPROVED).masterDataAction(APPROVE).build();
-
-					property.setCreatedBy(SYSTEM);
-					owner.setCreatedBy(SYSTEM);
-					ownerDetails.setCreatedBy(SYSTEM);
-					propertyDetails.setCreatedBy(SYSTEM);
-					address.setCreatedBy(SYSTEM);
-					propertyDetails.setProperty(property);
-					address.setProperty(property);
-					owner.setProperty(property);
-					ownerDetails.setProperty(property);
-					ownerDetails.setOwner(owner);
-
-					propertyDetails.setCurrentowner(owner);
-					owner.setPropertyDetails(propertyDetails);
-					propertyList.add(property);
+				} else {
+					nonPropertyCount.getAndIncrement();
+					log.error("We are skipping uploading property for transit number: "
+							+ secondCell.substring(0, secondCell.length() - 2) + " as it already exists.");
 				}
 			}
 		}
 	}
+}
 
-	private int saveProperties(List<Property> properties) {
+	private PropertyResponse saveProperties(List<Property> properties, AtomicInteger nonPropertyCount) {
 		properties.forEach(property -> {
 			propertyRepository.save(property);
 		});
-
-		return properties.size();
+		PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(properties.size()).nonGeneratedCount(nonPropertyCount).build();
+		return propertyResponse;
 	}
 
 	private Boolean isNumeric(String value) {
