@@ -12,8 +12,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -126,7 +127,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					SheetContentsProcessor processor = new SheetContentsProcessor();
 					processSheet(styles, strings, new StreamingSheetContentsHandler(processor), stream);
 					if (!processor.propertyList.isEmpty()) {
-						return saveProperties(processor.propertyList, processor.nonPropertyCount);
+						return saveProperties(processor.propertyList, processor.skippedTransitNo);
 					}
 				}
 				index++;
@@ -151,7 +152,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					if (!sheetContentsProcessorDoc.propertywithdoc.isEmpty()) {
 						PropertyResponse propertyResponse = PropertyResponse.builder()
 								.generatedCount(sheetContentsProcessorDoc.propertywithdoc.size())
-								.nonGeneratedCount(sheetContentsProcessorDoc.nonPropertyCount).build();
+								.skippedTransitNo(sheetContentsProcessorDoc.skippedTransitNo).build();
 						return propertyResponse;
 					}
 				}
@@ -212,7 +213,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 
 		List<Property> propertywithdoc = new ArrayList<>();
 		String transitNo = "";
-		AtomicInteger nonPropertyCount = new AtomicInteger(0);
+		Set<String> skippedTransitNo = new HashSet<>();
 
 		@Override
 		public void processRow(Row row) {
@@ -278,7 +279,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								propertyRepository.save(property);
 								propertywithdoc.add(property);
 							} else {
-								nonPropertyCount.getAndIncrement();
+								skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
 								log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it does not exists.");
 							}
 						}
@@ -294,7 +295,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	private class SheetContentsProcessor implements StreamingRowProcessor {
 
 		List<Property> propertyList = new ArrayList<>();
-		AtomicInteger nonPropertyCount = new AtomicInteger(0);
+		Set<String> skippedTransitNo = new HashSet<>();
 
 		@Override
 		public void processRow(Row currentRow) {
@@ -437,17 +438,17 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							owner.setPropertyDetails(propertyDetails);
 							propertyList.add(property);
 						} else {
-							nonPropertyCount.getAndIncrement();
+							skippedTransitNo.add(secondCell.substring(0, secondCell.length() - 2));
 							log.error("We are skipping uploading property for transit number: "
 									+ secondCell.substring(0, secondCell.length() - 2) + " because of incorrect data.");
 						}
 					} else {
-						nonPropertyCount.getAndIncrement();
+						skippedTransitNo.add(secondCell);
 						log.error("We are skipping uploading property for transit number: " + secondCell
 								+ " because of incorrect transit number.");
 					}
 				} else {
-					nonPropertyCount.getAndIncrement();
+					skippedTransitNo.add(secondCell.substring(0, secondCell.length() - 2));
 					log.error("We are skipping uploading property for transit number: "
 							+ secondCell.substring(0, secondCell.length() - 2) + " as it already exists.");
 				}
@@ -456,11 +457,11 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 	}
 }
 
-	private PropertyResponse saveProperties(List<Property> properties, AtomicInteger nonPropertyCount) {
+	private PropertyResponse saveProperties(List<Property> properties, Set<String> skippedTransitNo) {
 		properties.forEach(property -> {
 			propertyRepository.save(property);
 		});
-		PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(properties.size()).nonGeneratedCount(nonPropertyCount).build();
+		PropertyResponse propertyResponse = PropertyResponse.builder().generatedCount(properties.size()).skippedTransitNo(skippedTransitNo).build();
 		return propertyResponse;
 	}
 

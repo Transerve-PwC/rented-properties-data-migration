@@ -1,6 +1,7 @@
 package org.egov.rp.model;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.HashSet;
+import java.util.Set;
 
 import javax.validation.Valid;
 
@@ -21,7 +22,7 @@ public class PropertyResponse {
 	@Valid
 	private int generatedCount;
 
-	@JsonProperty("Non-Inserted")
+	@JsonProperty("Skipped Properties Transit Numbers")
 	@Valid
-	private AtomicInteger nonGeneratedCount;
+	private Set<String> skippedTransitNo = new HashSet<>();
 }
