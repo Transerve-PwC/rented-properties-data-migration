@@ -80,9 +80,9 @@ public class Property extends AuditDetails{
 	@Column(name = "rent_payment_consumer_code")
 	private String rentPaymentConsumerCode;
 	
-	@OneToOne(
+	@OneToMany(
 			cascade = CascadeType.ALL,
 			mappedBy = "property"
 			)
-	private Document documents;
+	private Set<Document> documents = new HashSet<>();
 }
