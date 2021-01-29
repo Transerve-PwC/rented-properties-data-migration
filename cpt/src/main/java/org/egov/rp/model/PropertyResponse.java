@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -20,7 +21,8 @@ public class PropertyResponse {
 
 	@JsonProperty("Inserted")
 	@Valid
-	private int generatedCount;
+	@Default
+	private int generatedCount=0;
 
 	@JsonProperty("Skipped Properties Transit Numbers")
 	@Valid

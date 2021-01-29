@@ -128,6 +128,11 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					processSheet(styles, strings, new StreamingSheetContentsHandler(processor), stream);
 					if (!processor.propertyList.isEmpty()) {
 						return saveProperties(processor.propertyList, processor.skippedTransitNo);
+					} else {
+						PropertyResponse propertyResponse = PropertyResponse.builder()
+								.skippedTransitNo(processor.skippedTransitNo)
+								.build();
+						return propertyResponse;
 					}
 				}
 				index++;
@@ -153,6 +158,11 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 						PropertyResponse propertyResponse = PropertyResponse.builder()
 								.generatedCount(sheetContentsProcessorDoc.propertywithdoc.size())
 								.skippedTransitNo(sheetContentsProcessorDoc.skippedTransitNo).build();
+						return propertyResponse;
+					} else {
+						PropertyResponse propertyResponse = PropertyResponse.builder()
+								.skippedTransitNo(sheetContentsProcessorDoc.skippedTransitNo)
+								.build();
 						return propertyResponse;
 					}
 				}
@@ -244,6 +254,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 										.getPropertyByTransitNumber(transitNo.substring(0, transitNo.length() - 2));
 							}
 							if (property != null) {
+								if(property.getDocuments().size()<5) {
 							byte[] bytes = null;
 							List<HashMap<String, String>> response = null;
 							try {
@@ -275,9 +286,15 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 										.fileStoreId(response.get(0).get("fileStoreId")).build();
 								document.setCreatedBy(SYSTEM);
 								document.setProperty(property);
-								property.setDocuments(document);
+								Set<Document> documents = new HashSet<>();
+								documents.add(document);
+								property.setDocuments(documents);
 								propertyRepository.save(property);
 								propertywithdoc.add(property);
+								} else {
+									skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
+									log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it already exists.");
+								}
 							} else {
 								skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
 								log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it does not exists.");

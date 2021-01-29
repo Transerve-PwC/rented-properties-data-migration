@@ -43,8 +43,6 @@ public class ReadExcelController {
 			}
 			PropertyResponse propertyResponse = this.readExcelService.getDataFromExcel(tempFile, 1);
 			log.info("End controller method readExcel property inserted:" + propertyResponse.getGeneratedCount());
-			if (propertyResponse.getGeneratedCount() == 0)
-				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
 
 			return new ResponseEntity<>(propertyResponse, HttpStatus.OK);
 		} catch (Exception e) {	
@@ -67,8 +65,6 @@ public class ReadExcelController {
 			}
 			PropertyResponse propertyResponse = this.readExcelService.getDocFromExcel(tempFile, 2);
 			log.info("End controller method readExcelforDoc property document inserted:" + propertyResponse.getGeneratedCount());
-			if (propertyResponse.getGeneratedCount() == 0)
-				throw new CustomException("FILE_TEMPLATE_NOT_VALID", "Invalid template uploaded. Please upload a valid property excel file.");
 
 			return new ResponseEntity<>(propertyResponse, HttpStatus.OK);
 		} catch (Exception e) {	
