@@ -235,13 +235,14 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 				if (row.getRowNum() >= 2) {
 					String documentType = String
 							.valueOf(getValueFromCell(row, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
-					if (!documentType.isEmpty()) {
+					String documentName = String
+							.valueOf(getValueFromCell(row, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
+
+					if (!documentName.isEmpty()) {
 						String transitSiteNo = String
 								.valueOf(getValueFromCell(row, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
 
 						Property property;
-						String documentName = String
-								.valueOf(getValueFromCell(row, 5, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
 						if (filesList.contains(documentName)) {
 
 							if (!transitSiteNo.isEmpty()) {
@@ -300,6 +301,9 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it does not exists.");
 							}
 						}
+					} else {
+						skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
+						log.error("Document name is empty for property with transit number: "+ transitNo.substring(0, transitNo.length() - 2));
 					}
 				}
 
