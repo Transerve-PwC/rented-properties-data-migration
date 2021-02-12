@@ -230,7 +230,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 			File folder = new File(fileLocation);
 			String[] listOfFiles = folder.list();
 			List<String> filesList = Arrays.asList(listOfFiles);
-
+			filesList.replaceAll(String::toUpperCase);
 			if (!filesList.isEmpty()) {
 				if (row.getRowNum() >= 2) {
 					String documentType = String
@@ -243,7 +243,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								.valueOf(getValueFromCell(row, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)).trim();
 
 						Property property;
-						if (filesList.contains(documentName)) {
+						if (filesList.contains(documentName.toUpperCase())) {
 
 							if (!transitSiteNo.isEmpty()) {
 								transitNo = transitSiteNo;
@@ -271,15 +271,15 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							}
 								String docType = "";
 
-								if (documentType.contains("documents")) {
+								if (documentType.toUpperCase().contains("DOCUMENTS")) {
 									docType = "TRANSIT_SITE_DOCUMENTS";
-								} else if (documentType.contains("Transit site Images")) {
+								} else if (documentType.toUpperCase().contains("Transit site Images".toUpperCase())) {
 									docType = "TRANSIT_SITE_IMAGES";
-								} else if (documentType.contains("Allotee Image")) {
+								} else if (documentType.toUpperCase().contains("Allotee Image".toUpperCase())) {
 									docType = "ALLOTEE_IMAGE";
-								} else if (documentType.contains("Aadhar")) {
+								} else if (documentType.toUpperCase().contains("Aadhar".toUpperCase())) {
 									docType = "ALLOTEE_AADHAR";
-								} else if (documentType.contains("Building Plan")) {
+								} else if (documentType.toUpperCase().contains("Building Plan".toUpperCase())) {
 									docType = "APPROVED_BUILDING_PLAN";
 								}
 								Document document = Document.builder().referenceId(property.getId())
@@ -428,13 +428,13 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 									.tenantId(TENANTID).isPrimaryOwner(true).activeState(true).build();
 
 							String colonyCode = "";
-							if (firstCell.contains("Milk")) {
+							if (firstCell.toUpperCase().contains("MILK")) {
 								colonyCode = "COLONY_MILK";
-							} else if (firstCell.contains("Kumhar")) {
+							} else if (firstCell.toUpperCase().contains("KUMHAR")) {
 								colonyCode = "COLONY_KUMHAR";
-							} else if (firstCell.contains("Sector 52-53")) {
+							} else if (firstCell.toUpperCase().contains("Sector 52-53".toUpperCase())) {
 								colonyCode = "COLONY_SECTOR_52_53";
-							} else if (firstCell.contains("Vikas Nagar")) {
+							} else if (firstCell.toUpperCase().contains("Vikas Nagar".toUpperCase())) {
 								colonyCode = "COLONY_VIKAS_NAGAR";
 							}
 							Property property = Property.builder().colony(colonyCode)
