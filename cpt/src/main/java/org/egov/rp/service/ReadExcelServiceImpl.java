@@ -68,8 +68,8 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 
 	private static final String SYSTEM = "system";
 	private static final String TENANTID = "ch.chandigarh";
-	private static final String APPROVE = "APPROVE";
-	private static final String PM_APPROVED = "PM_APPROVED";
+	//private static final String APPROVE = "APPROVE";
+	private static final String PM_DRAFTED = "PM_DRAFTED";
 	private static final String MASTERENTRY = "MasterEntry";
 
 	@Override
@@ -397,7 +397,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							if (isNumeric(thirdCell)) {
 								thirdValue = thirdCell;
 							}
-							PropertyDetails propertyDetails = PropertyDetails.builder().area(thirdValue)
+							PropertyDetails propertyDetails = PropertyDetails.builder().area(String.valueOf(Math.round(Float.parseFloat(thirdCell))))
 									.interestRate(dvalue).rentIncrementPeriod((int) Math.round(fvalue))
 									.rentIncrementPercentage(Double.valueOf(seventeenCell))
 									.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
@@ -442,7 +442,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 									.propertyDetails(propertyDetails).address(address)
 									.owners(Collections.singleton(owner))
 									.ownerDetails(Collections.singleton(ownerDetails)).tenantId(TENANTID)
-									.masterDataState(PM_APPROVED).masterDataAction(APPROVE).build();
+									.masterDataState(PM_DRAFTED).masterDataAction("").build();
 
 							property.setCreatedBy(SYSTEM);
 							owner.setCreatedBy(SYSTEM);
