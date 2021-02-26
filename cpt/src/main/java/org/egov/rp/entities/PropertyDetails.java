@@ -54,7 +54,7 @@ public class PropertyDetails extends AuditDetails{
 	 * Maloya - 5 Kumhar Colony Maloya - 5
 	 */
 	@Column(name = "rent_increment_period")
-	private int rentIncrementPeriod;
+	private float rentIncrementPeriod;
 
 	@Id
 	@GeneratedValue(generator = "UUID")
