@@ -398,7 +398,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								thirdValue = thirdCell;
 							}
 							PropertyDetails propertyDetails = PropertyDetails.builder().area(String.valueOf(Math.round(Float.parseFloat(thirdCell))))
-									.interestRate(dvalue).rentIncrementPeriod((int) Math.round(fvalue))
+									.interestRate(dvalue).rentIncrementPeriod(fvalue)
 									.rentIncrementPercentage(Double.valueOf(seventeenCell))
 									.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
 									.build();
