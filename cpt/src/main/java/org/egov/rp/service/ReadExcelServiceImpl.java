@@ -424,7 +424,8 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							} else {
 								ownerDetails.setPosessionStartdate(convertStrDatetoLong(fourteenCell));
 							}
-							Owner owner = Owner.builder().allotmenNumber(thirteenCell).ownerDetails(ownerDetails)
+							String thirteenValue=isNumeric(thirteenCell)?thirteenCell.substring(0, thirteenCell.length() - 2):thirteenCell;
+							Owner owner = Owner.builder().allotmenNumber(thirteenValue).ownerDetails(ownerDetails)
 									.tenantId(TENANTID).isPrimaryOwner(true).activeState(true).build();
 
 							String colonyCode = "";
