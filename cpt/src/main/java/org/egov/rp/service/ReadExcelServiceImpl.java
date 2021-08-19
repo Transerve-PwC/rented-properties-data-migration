@@ -246,13 +246,13 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 						if (filesList.contains(documentName.toUpperCase())) {
 
 							if (!transitSiteNo.isEmpty()) {
-								transitNo = transitSiteNo;
+								transitNo = isNumeric(transitSiteNo)?transitSiteNo.substring(0, transitSiteNo.length() - 2):transitSiteNo;
 
 								property = propertyRepository.getPropertyByTransitNumber(
-										transitSiteNo.substring(0, transitSiteNo.length() - 2));
+										transitNo);
 							} else {
 								property = propertyRepository
-										.getPropertyByTransitNumber(transitNo.substring(0, transitNo.length() - 2));
+										.getPropertyByTransitNumber(transitNo);
 							}
 							if (property != null) {
 								if(property.getDocuments().size()<5) {
@@ -293,17 +293,17 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								propertyRepository.save(property);
 								propertywithdoc.add(property);
 								} else {
-									skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
-									log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it already exists.");
+									skippedTransitNo.add(transitNo);
+									log.error("We are skipping uploading document as property for transit number: "+ transitNo + " as it already exists.");
 								}
 							} else {
-								skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
-								log.error("We are skipping uploading document as property for transit number: "+ transitNo.substring(0, transitNo.length() - 2) + " as it does not exists.");
+								skippedTransitNo.add(transitNo);
+								log.error("We are skipping uploading document as property for transit number: "+ transitNo + " as it does not exists.");
 							}
 						}
 					} else {
-						skippedTransitNo.add(transitNo.substring(0, transitNo.length() - 2));
-						log.error("Document name is empty for property with transit number: "+ transitNo.substring(0, transitNo.length() - 2));
+						skippedTransitNo.add(transitNo);
+						log.error("Document name is empty for property with transit number: "+ transitNo);
 					}
 				}
 
@@ -327,8 +327,10 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					String secondCell = String
 							.valueOf(getValueFromCell(currentRow, 2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
 							.trim();
+					String secontCellVal=isNumeric(secondCell)?secondCell.substring(0, secondCell.length() - 2):secondCell;
+					
 					Property propertyDb = propertyRepository
-							.getPropertyByTransitNumber(secondCell.substring(0, secondCell.length() - 2));
+							.getPropertyByTransitNumber(secontCellVal);
 					if (propertyDb == null) {
 					String firstCell = String
 							.valueOf(getValueFromCell(currentRow, 1, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
@@ -380,8 +382,9 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 					String seventeenCell = String
 							.valueOf(getValueFromCell(currentRow, 17, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK))
 							.trim();
-
-					if (isNumeric(secondCell)) {
+					
+					
+					if (isNumeric(secondCell) ||(firstCell.contains("Vikas".toUpperCase())&&isNumeric(secondCell.split("-")[1]))) {
 						if (isNumeric(thirdCell) && isNumeric(fifthCell)
 								&& isNumeric(seventhCell.substring(1, seventhCell.length() - 1))) {
 
@@ -400,11 +403,11 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							PropertyDetails propertyDetails = PropertyDetails.builder().area(String.valueOf(Math.round(Float.parseFloat(thirdCell))))
 									.interestRate(dvalue).rentIncrementPeriod(fvalue)
 									.rentIncrementPercentage(Double.valueOf(seventeenCell))
-									.transitNumber(secondCell.substring(0, secondCell.length() - 2)).tenantId(TENANTID)
+									.transitNumber(secontCellVal).tenantId(TENANTID)
 									.build();
 							Address address = Address.builder().area(fourthCell)
 									.pincode(fifthCell.substring(0, fifthCell.length() - 2)).tenantId(TENANTID)
-									.transitNumber(secondCell.substring(0, secondCell.length() - 2)).build();
+									.transitNumber(secontCellVal).build();
 							OwnerDetails ownerDetails = OwnerDetails.builder().name(sixthCell)
 									.phone(seventhCell.substring(1, seventhCell.length() - 1)).relation(eirthCell)
 									.fatherOrHusband(ninthCell).allotmentStartdate(convertStrDatetoLong(twelveCell))
@@ -439,7 +442,7 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 								colonyCode = "COLONY_VIKAS_NAGAR";
 							}
 							Property property = Property.builder().colony(colonyCode)
-									.transitNumber(secondCell.substring(0, secondCell.length() - 2))
+									.transitNumber(secontCellVal)
 									.propertyDetails(propertyDetails).address(address)
 									.owners(Collections.singleton(owner))
 									.ownerDetails(Collections.singleton(ownerDetails)).tenantId(TENANTID)
@@ -460,19 +463,20 @@ public class ReadExcelServiceImpl implements ReadExcelService {
 							owner.setPropertyDetails(propertyDetails);
 							propertyList.add(property);
 						} else {
-							skippedTransitNo.add(secondCell.substring(0, secondCell.length() - 2));
+							
+							skippedTransitNo.add(secontCellVal);
 							log.error("We are skipping uploading property for transit number: "
-									+ secondCell.substring(0, secondCell.length() - 2) + " because of incorrect data.");
+									+ secontCellVal + " because of incorrect data.");
 						}
 					} else {
-						skippedTransitNo.add(secondCell);
-						log.error("We are skipping uploading property for transit number: " + secondCell
+						skippedTransitNo.add(secontCellVal);
+						log.error("We are skipping uploading property for transit number: " + secontCellVal
 								+ " because of incorrect transit number.");
 					}
 				} else {
-					skippedTransitNo.add(secondCell.substring(0, secondCell.length() - 2));
+					skippedTransitNo.add(secontCellVal);
 					log.error("We are skipping uploading property for transit number: "
-							+ secondCell.substring(0, secondCell.length() - 2) + " as it already exists.");
+							+ secontCellVal + " as it already exists.");
 				}
 			}
 		}
